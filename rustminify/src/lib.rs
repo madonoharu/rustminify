@@ -30,16 +30,14 @@
 use std::mem;
 
 use proc_macro2::{Delimiter, LineColumn, Spacing, TokenStream, TokenTree};
-use quote::{quote, ToTokens as _};
+use quote::{ToTokens as _, quote};
 use syn::{
-    parse_quote,
-    visit_mut::{self, VisitMut},
     AttrStyle, Attribute, Field, FieldValue, File, ForeignItemFn, ForeignItemMacro,
-    ForeignItemStatic, ForeignItemType, ImplItemConst, ImplItemMacro, ImplItemMethod, ImplItemType,
-    ItemConst, ItemEnum, ItemExternCrate, ItemFn, ItemForeignMod, ItemImpl, ItemMacro, ItemMacro2,
-    ItemMod, ItemStatic, ItemStruct, ItemTrait, ItemTraitAlias, ItemType, ItemUnion, ItemUse, Meta,
-    MetaList, NestedMeta, Path, TraitItemConst, TraitItemMacro, TraitItemMethod, TraitItemType,
-    Variant,
+    ForeignItemStatic, ForeignItemType, ImplItemConst, ImplItemMacro, ImplItemType, ItemConst,
+    ItemEnum, ItemExternCrate, ItemFn, ItemForeignMod, ItemImpl, ItemMacro, ItemMod, ItemStatic,
+    ItemStruct, ItemTrait, ItemTraitAlias, ItemType, ItemUnion, ItemUse, Path, TraitItemConst,
+    TraitItemMacro, TraitItemType, Variant, parse_quote,
+    visit_mut::{self, VisitMut},
 };
 
 /// Minifies a [`File`].
@@ -298,7 +296,6 @@ pub fn remove_docs(mut file: File) -> File {
             visit_foreign_item_type_mut(_, &mut ForeignItemType);
             visit_impl_item_const_mut(_, &mut ImplItemConst);
             visit_impl_item_macro_mut(_, &mut ImplItemMacro);
-            visit_impl_item_method_mut(_, &mut ImplItemMethod);
             visit_impl_item_type_mut(_, &mut ImplItemType);
             visit_item_const_mut(_, &mut ItemConst);
             visit_item_enum_mut(_, &mut ItemEnum);
@@ -306,7 +303,6 @@ pub fn remove_docs(mut file: File) -> File {
             visit_item_fn_mut(_, &mut ItemFn);
             visit_item_foreign_mod_mut(_, &mut ItemForeignMod);
             visit_item_impl_mut(_, &mut ItemImpl);
-            visit_item_macro2_mut(_, &mut ItemMacro2);
             visit_item_macro_mut(_, &mut ItemMacro);
             visit_item_mod_mut(_, &mut ItemMod);
             visit_item_static_mut(_, &mut ItemStatic);
@@ -318,27 +314,31 @@ pub fn remove_docs(mut file: File) -> File {
             visit_item_use_mut(_, &mut ItemUse);
             visit_trait_item_const_mut(_, &mut TraitItemConst);
             visit_trait_item_macro_mut(_, &mut TraitItemMacro);
-            visit_trait_item_method_mut(_, &mut TraitItemMethod);
             visit_trait_item_type_mut(_, &mut TraitItemType);
             visit_variant_mut(_, &mut Variant);
         }
     }
 
     fn remove_docs(attrs: &mut Vec<Attribute>) {
-        attrs.retain(|a| !matches!(a.parse_meta(), Ok(m) if m.path().is_ident("doc")));
-        for attr in attrs {
-            if let Ok(Meta::List(MetaList { path, nested, .. })) = attr.parse_meta() {
-                if any(&path, &["warn", "deny", "forbid"]) {
-                    let bang = matches!(attr.style, AttrStyle::Inner(_)).then(|| quote!(!));
-                    let nested = nested.into_iter().filter(|nested| {
-                        !matches!(
-                            nested, NestedMeta::Meta(Meta::Path(path))
-                            if any(path, &["missing_docs", "missing_crate_level_docs"])
-                        )
-                    });
-                    *attr = parse_quote!(##bang[#path(#(#nested),*)]);
+        attrs.retain(|a| !a.path().is_ident("doc"));
+        for attr in attrs
+            .iter_mut()
+            .filter(|a| any(a.path(), &["warn", "deny", "forbid"]))
+        {
+            let path = attr.path();
+            let bang = matches!(attr.style, AttrStyle::Inner(_)).then(|| quote!(!));
+            let mut nested = vec![];
+
+            attr.parse_nested_meta(|meta| {
+                if !any(&meta.path, &["missing_docs", "missing_crate_level_docs"]) {
+                    nested.push(meta.input.parse::<TokenStream>()?);
                 }
-            }
+
+                Ok(())
+            })
+            .unwrap_or_default();
+
+            *attr = parse_quote!(# #bang[#path(#(#nested),*)]);
         }
 
         fn any(path: &Path, idents: &[&str]) -> bool {
@@ -351,8 +351,8 @@ pub fn remove_docs(mut file: File) -> File {
 mod tests {
     use core::str::FromStr;
     use proc_macro2::TokenStream;
-    use quote::{quote, ToTokens as _};
-    use syn::{parse_quote, File};
+    use quote::{ToTokens as _, quote};
+    use syn::{File, parse_quote};
     use test_case::test_case;
 
     #[test_case(quote!(a + *b)                                => "a+*b"                           ; "joint_add_deref"       )]

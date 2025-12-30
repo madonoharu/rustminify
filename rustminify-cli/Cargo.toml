@@ -1,10 +1,10 @@
 [package]
 name = "rustminify-cli"
-version = "0.1.0"
-edition = "2018"
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
 description = "A tool for minifying Rust code."
 repository = "https://github.com/qryxip/rustminify"
+license = "MIT OR Apache-2.0"
 keywords = ["minification", "minifier"]
 categories = ["command-line-utilities", "compression"]
 
@@ -13,7 +13,7 @@ name = "rustminify"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.42"
-rustminify = { version = "0.2.0", path = "../rustminify" }
-structopt = "0.3.22"
-syn = { version = "1.0.74", features = ["full"] }
+anyhow.workspace = true
+rustminify = { path = "../rustminify" }
+structopt = "0.3.26"
+syn.workspace = true
